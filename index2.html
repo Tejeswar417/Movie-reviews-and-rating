@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Movie Review & Rating Platform</title>
+  <style>
+    /* Basic styles and layout */
+    :root {
+      --max-width: 1100px;
+      --card-height: 320px;
+      font-family: Inter, system-ui, Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      background: #0f172a;
+      color: #e6eef8;
+    }
+    .app {
+      width: 100%;
+      max-width: var(--max-width);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+    form {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+    input[type="search"] {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #0b1220;
+      color: inherit;
+      min-width: 220px;
+    }
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #374151;
+    }
+
+    /* Movie cards layout */
+    #movie-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .movie-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: var(--card-height);
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+      cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+    .movie-card:hover {
+      transform: translateY(-6px);
+    }
+    .poster {
+      width: 100%;
+      height: 240px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #0b1220;
+      display: block;
+    }
+    .mtitle {
+      font-weight: 600;
+      font-size: 14px;
+      margin: 0;
+    }
+    .meta {
+      font-size: 13px;
+      color: #a8b3c9;
+    }
+
+    /* Detail panel (overlay) */
+    #movie-detail {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      bottom: 20px;
+      width: min(520px, 92vw);
+      background: #071024;
+      border-radius: 12px;
+      padding: 16px;
+      overflow: auto;
+      box-shadow: 0 12px 40px rgba(2,6,23,0.8);
+      display: none;
+      z-index: 30;
+    }
+    #movie-detail img.poster-lg {
+      width: 140px;
+      float: left;
+      margin-right: 12px;
+      border-radius: 6px;
+    }
+    #close-detail {
+      float: right;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: #cfe3ff;
+      cursor: pointer;
+    }
+    .clearfix::after {
+      content: "";
+      display: block;
+      clear: both;
+    }
+
+    /* Review section */
+    .review {
+      background: rgba(255,255,255,0.02);
+      padding: 8px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    label {
+      display: block;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 72px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #061229;
+      color: inherit;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    input[type=number] {
+      width: 80px;
+      padding: 6px;
+      border-radius: 8px;
+      background: #061229;
+      color: inherit;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (max-width: 900px) {
+      #movie-detail {
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        bottom: 8px;
+        width: auto;
+      }
+      .movie-card {
+        min-height: 280px;
+      }
+      #movie-list {
+        grid-template-columns: repeat(auto-fill, minmax(145px,1fr));
+        gap:10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Movie Review & Rating</h1>
+      <form id="search-form" role="search" aria-label="Search movies">
+        <input id="search-input" type="search" placeholder="Search movies (e.g. Inception)" required />
+        <button type="submit">Search</button>
+        <button id="popular-btn" type="button" class="secondary">Popular</button>
+      </form>
+    </header>
+    <main>
+      <section id="movie-list" aria-live="polite"></section>
+    </main>
+  </div>
+  <aside id="movie-detail" aria-hidden="true"></aside>
+
+  <script>
+    // ===== CONFIGURATION =====
+    const TMDB_API_KEY = 'b5d99278803dd190bad05b035c8ca91d';
+
+    // Base URLs for TMDb API and images
+    const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+    const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+
+    // DOM element references
+    const searchForm = document.getElementById('search-form');
+    const searchInput = document.getElementById('search-input');
+    const movieListElem = document.getElementById('movie-list');
+    const detailPanel = document.getElementById('movie-detail');
+    const popularButton = document.getElementById('popular-btn');
+
+    // ----------------------------
+    // — Local Storage (Reviews) Helpers
+    // ----------------------------
+    function loadAllReviews() {
+      try {
+        return JSON.parse(localStorage.getItem('reviewsByMovie')) || {};
+      } catch (e) {
+        console.error('Error parsing reviews from storage:', e);
+        return {};
+      }
+    }
+    function saveAllReviews(reviewsObj) {
+      localStorage.setItem('reviewsByMovie', JSON.stringify(reviewsObj));
+    }
+    function getReviews(movieId) {
+      const all = loadAllReviews();
+      return all[movieId] || [];
+    }
+    function addReview(movieId, review) {
+      const all = loadAllReviews();
+      if (!all[movieId]) {
+        all[movieId] = [];
+      }
+      all[movieId].push(review);
+      saveAllReviews(all);
+    }
+
+    // ----------------------------
+    // — API / Fetch Helper
+    // ----------------------------
+    async function fetchFromTMDb(path, params = {}) {
+      const url = new URL(TMDB_BASE_URL + path);
+      url.searchParams.set('api_key', TMDB_API_KEY);
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined && val !== null) {
+          url.searchParams.set(key, val);
+        }
+      }
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('TMDb API error, status: ' + response.status);
+      }
+      return response.json();
+    }
+
+    // ----------------------------
+    // — Rendering / UI Helpers
+    // ----------------------------
+    function sanitizeText(str) {
+      if (!str) return '';
+      return str
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    function posterOrPlaceholder(path) {
+      if (path) {
+        return TMDB_IMAGE_BASE + path;
+      }
+      // Return a small inline SVG as placeholder
+      return 'data:image/svg+xml;charset=utf-8,' +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600">
+             <rect width="100%" height="100%" fill="#071024"/>
+             <text x="50%" y="50%" fill="#6b7280" font-family="Arial" font-size="18" text-anchor="middle">
+               No Image
+             </text>
+           </svg>`
+        );
+    }
+
+    function renderMovieCards(movies) {
+      movieListElem.innerHTML = ''; // clear existing
+      if (!movies || movies.length === 0) {
+        movieListElem.innerHTML = '<p style="padding:12px; color:#9aa6bf">No results. Try another title.</p>';
+        return;
+      }
+      for (const movie of movies) {
+        const card = document.createElement('article');
+        card.className = 'movie-card';
+        card.dataset.movieId = movie.id;
+
+        const posterUrl = posterOrPlaceholder(movie.poster_path);
+        card.innerHTML = `
+          <img class="poster" src="${posterUrl}" alt="${sanitizeText(movie.title)} poster">
+          <div>
+            <h3 class="mtitle">${sanitizeText(movie.title)}</h3>
+            <div class="meta">
+              TMDb: ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+              • ${movie.release_date ? movie.release_date.slice(0,4) : '—'}
+            </div>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          showDetailPanel(movie.id);
+        });
+
+        movieListElem.appendChild(card);
+      }
+    }
+
+    // ----------------------------
+    // — Detail / Review Panel
+    // ----------------------------
+    async function showDetailPanel(movieId) {
+      // Show panel and loading message
+      detailPanel.style.display = 'block';
+      detailPanel.setAttribute('aria-hidden', 'false');
+      detailPanel.innerHTML = '<p>Loading movie details...</p>';
+
+      try {
+        const data = await fetchFromTMDb(`/movie/${movieId}`, {
+          append_to_response: 'credits'
+        });
+
+        const reviews = getReviews(movieId);
+        const averageRating = reviews.length
+          ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+          : null;
+
+        const posterUrl = posterOrPlaceholder(data.poster_path);
+        const castList = (data.credits && data.credits.cast)
+          ? data.credits.cast.slice(0, 6).map(c => sanitizeText(c.name)).join(', ')
+          : '—';
+
+        detailPanel.innerHTML = `
+          <button id="close-detail">Close</button>
+          <div class="clearfix">
+            <img class="poster-lg" src="${posterUrl}" alt="${sanitizeText(data.title)} poster">
+            <h2>${sanitizeText(data.title)}${data.release_date ? ' (' + data.release_date.slice(0,4) + ')' : ''}</h2>
+            <div style="margin-bottom:8px; color:#9fb0d9">
+              TMDb: ${data.vote_average ? data.vote_average.toFixed(1) : 'N/A'} •
+              Runtime: ${data.runtime || '—'} min
+            </div>
+            <div style="color:#bfcfe8">${sanitizeText(data.overview)}</div>
+          </div>
+
+          <hr style="opacity:0.06; margin:12px 0;">
+
+          <h3 style="margin-bottom:8px">
+            User Reviews ${
+              averageRating ? `(Avg: ${averageRating} / 10)` : '(No local reviews yet)'
+            }
+          </h3>
+          <div id="reviews-container"></div>
+
+          <hr style="opacity:0.06; margin:12px 0;">
+
+          <h3>Add Your Review</h3>
+          <form id="review-form">
+            <label>Rating (1–10): <input name="rating" required type="number" min="1" max="10" value="8"></label>
+            <label>Comment:
+              <textarea name="comment" required placeholder="What did you like? Any spoilers?"></textarea>
+            </label>
+            <button type="submit">Submit Review</button>
+          </form>
+        `;
+
+        document.getElementById('close-detail').addEventListener('click', () => {
+          detailPanel.style.display = 'none';
+          detailPanel.setAttribute('aria-hidden', 'true');
+        });
+
+        renderReviewsSection(movieId);
+
+        document.getElementById('review-form').addEventListener('submit', (event) => {
+          event.preventDefault();
+          const form = event.target;
+          const rating = Number(form.rating.value);
+          const comment = form.comment.value.trim();
+
+          if (!comment || isNaN(rating) || rating < 1 || rating > 10) {
+            alert('Please enter a rating between 1 and 10 and a comment.');
+            return;
+          }
+
+          const newReview = {
+            rating: rating,
+            comment: comment,
+            timestamp: Date.now()
+          };
+          addReview(movieId, newReview);
+          renderReviewsSection(movieId);
+          form.comment.value = '';
+        });
+
+      } catch (error) {
+        detailPanel.innerHTML = '<p style="color:#fca5a5">Failed to load movie details. See console.</p>';
+        console.error(error);
+      }
+    }
+
+    function renderReviewsSection(movieId) {
+      const container = document.getElementById('reviews-container');
+      const reviews = getReviews(movieId);
+      if (!reviews || reviews.length === 0) {
+        container.innerHTML = '<p style="color:#9aa6bf">No reviews yet — be the first to add one!</p>';
+        return;
+      }
+
+      // Sort by newest first
+      reviews.sort((a, b) => b.timestamp - a.timestamp);
+
+      container.innerHTML = reviews.map(review => `
+        <div class="review">
+          <strong>${review.rating} / 10</strong> &middot;
+          <em style="color:#94a3b8">${new Date(review.timestamp).toLocaleString()}</em>
+          <div style="margin-top:6px;">
+            ${sanitizeText(review.comment)}
+          </div>
+        </div>
+      `).join('');
+
+      const average = (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1);
+      const heading = detailPanel.querySelector('h3');
+      if (heading) {
+        heading.innerText = `User Reviews (Avg: ${average} / 10)`;
+      }
+    }
+
+    // ----------------------------
+    // — Search & Popular Buttons
+    // ----------------------------
+    searchForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const query = searchInput.value.trim();
+      if (!query) return;
+      movieListElem.innerHTML = '<p style="padding:12px; color:#9aa6bf">Searching…</p>';
+      try {
+        const data = await fetchFromTMDb('/search/movie', { query: query });
+        renderMovieCards(data.results);
+      } catch (err) {
+        movieListElem.innerHTML = '<p style="padding:12px; color:#fda4af">Search failed. See console.</p>';
+        console.error(err);
+      }
+    });
+
+    popularButton.addEventListener('click', async () => {
+      movieListElem.innerHTML = '<p style="padding:12px; color:#9aa6bf">Loading popular movies…</p>';
+      try {
+        const data = await fetchFromTMDb('/movie/popular', { page: 1 });
+        renderMovieCards(data.results);
+      } catch (err) {
+        movieListElem.innerHTML = '<p style="padding:12px; color:#fda4af">Failed to load popular movies.</p>';
+        console.error(err);
+      }
+    });
+
+    // On startup, load the popular movies
+    (async function initializeApp() {
+      try {
+        const data = await fetchFromTMDb('/movie/popular', { page: 1 });
+        renderMovieCards(data.results);
+      } catch (err) {
+        movieListElem.innerHTML =
+          '<p style="padding:12px; color:#9aa6bf">Could not load movies — check API key?</p>';
+        console.error(err);
+      }
+    })();
+  </script>
+</body>
+</html>
